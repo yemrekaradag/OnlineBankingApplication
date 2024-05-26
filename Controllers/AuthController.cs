@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using OnlineBankingApplication.Context;
 using OnlineBankingApplication.Entities;
+using OnlineBankingApplication.Exceptions;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -26,17 +27,27 @@ namespace OnlineBankingApplication.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register(User user)
         {
+            var existingUser = _context.Users.SingleOrDefault(u => u.Username == user.Username);
+            if (existingUser != null)
+            {
+                throw new BadRequestException("Username already exists.");
+            }
+
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(user.PasswordHash);
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
-            return Ok();
+
+            return Ok("User registered successfully.");
         }
 
         [HttpPost("login")]
         public async Task<IActionResult> Login(User user)
         {
-            var existingUser = await _context.Users
-                .SingleOrDefaultAsync(u => u.Username == user.Username && u.Password == user.Password);
-            if (existingUser == null) return Unauthorized();
+            var existingUser = _context.Users.SingleOrDefault(u => u.Username == user.Username);
+            if (existingUser == null || !BCrypt.Net.BCrypt.Verify(user.PasswordHash, existingUser.PasswordHash))
+            {
+                throw new BadRequestException("Invalid username or password.");
+            }
 
             var token = GenerateJwtToken(existingUser);
             return Ok(new { token });
@@ -44,21 +55,23 @@ namespace OnlineBankingApplication.Controllers
 
         private string GenerateJwtToken(User user)
         {
-            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
-            var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
-
             var claims = new[]
             {
-            new Claim(JwtRegisteredClaimNames.Sub, user.Username),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
-        };
+                new Claim(JwtRegisteredClaimNames.Sub, user.Username),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            };
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+            var expires = DateTime.Now.AddMinutes(Convert.ToDouble(_configuration["Jwt:ExpireMinutes"]));
 
             var token = new JwtSecurityToken(
                 issuer: _configuration["Jwt:Issuer"],
                 audience: _configuration["Jwt:Audience"],
                 claims: claims,
-                expires: DateTime.Now.AddMinutes(30),
-                signingCredentials: credentials);
+                expires: expires,
+                signingCredentials: creds
+            );
 
             return new JwtSecurityTokenHandler().WriteToken(token);
         }

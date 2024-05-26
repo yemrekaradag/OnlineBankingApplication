@@ -1,18 +1,35 @@
-version: '3.4'
+version: '3.8'
 
 services:
-  app:
-    image: onlinebankingapp
+  onlinebankingapp:
+    image: onlinebankingapp:latest
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.api
     ports:
-      - "80:80"
+      - "5270:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=DataSource=app.db
+      - Jwt__Key=yunus
+      - Jwt__Issuer=yunus
+      - Jwt__Audience=yunus
+      - Jwt__ExpireMinutes=60
+      - RabbitMQ__Hostname=rabbitmq
+      - RabbitMQ__QueueName=transactions
     depends_on:
       - rabbitmq
-
+    networks:
+      - my-networkk
   rabbitmq:
     image: "rabbitmq:3-management"
     ports:
       - "5672:5672"
       - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    networks:
+      - my-networkk
+networks:
+  my-networkk:

@@ -1,0 +1,27 @@
+# Birinci aþama: Yapý
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+
+# Çalýþma dizinini ayarla
+WORKDIR /app
+
+# Proje dosyalarýný kopyala ve baðýmlýlýklarý geri yükle
+COPY *.csproj ./OnlineBankingApplication/
+RUN dotnet restore OnlineBankingApplication/OnlineBankingApplication.csproj
+
+# Uygulama kaynak kodunu kopyala
+COPY . ./OnlineBankingApplication
+
+# Uygulamayý yayýmla
+RUN dotnet publish OnlineBankingApplication/OnlineBankingApplication.csproj -c Release -o /app/publish
+
+# Ýkinci aþama: Çalýþtýrma
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+
+# Çalýþma dizinini ayarla
+WORKDIR /app
+
+# Yayýnlanan çýktýyý kopyala
+COPY --from=build /app/publish .
+
+# Uygulamayý baþlat
+ENTRYPOINT ["dotnet", "OnlineBankingApplication.dll"]

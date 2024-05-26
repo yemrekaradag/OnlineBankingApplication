@@ -3,12 +3,23 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using OnlineBankingApplication.Context;
+using OnlineBankingApplication.Middlewares;
+using OnlineBankingApplication.Services;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var configuration = builder.Configuration;  
+var jwtSettings = configuration.GetSection("Jwt");
+var rabbitMQSettings = configuration.GetSection("RabbitMQ");
+
 builder.Services.AddDbContext<BaseDbContext>(options =>
     options.UseInMemoryDatabase("BankingDB"));
+
+builder.Services.AddSingleton(new MessageQueueService(
+    rabbitMQSettings["Hostname"], rabbitMQSettings["QueueName"]));
+
+builder.Services.AddSingleton<ResilientHttpClient>();
 
 // Add services to the container.
 
@@ -23,9 +34,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+            ValidIssuer = jwtSettings["Issuer"],
+            ValidAudience = jwtSettings["Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["Key"]))
         };
     });
 
@@ -45,7 +56,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+app.UseMiddleware<ErrorHandlingMiddleware>();
+
+//app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();

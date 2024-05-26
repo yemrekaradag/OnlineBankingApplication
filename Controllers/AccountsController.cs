@@ -1,7 +1,10 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OnlineBankingApplication.Context;
 using OnlineBankingApplication.Entities;
+using OnlineBankingApplication.Services;
+using System.Text.Json;
 
 namespace OnlineBankingApplication.Controllers
 {
@@ -10,8 +13,16 @@ namespace OnlineBankingApplication.Controllers
     public class AccountsController : ControllerBase
     {
         private readonly BaseDbContext _context;
+        private readonly MessageQueueService _mqService;
+        private readonly ResilientHttpClient _resilientHttpClient;
         private static readonly object _lock = new object();
 
+        public AccountsController(BaseDbContext context, MessageQueueService mqService, ResilientHttpClient resilientHttpClient)
+        {
+            _context = context;
+            _mqService = mqService;
+            _resilientHttpClient = resilientHttpClient;
+        }
         public AccountsController(BaseDbContext context)
         {
             _context = context;
@@ -35,6 +46,16 @@ namespace OnlineBankingApplication.Controllers
 
                 account.Balance += amount;
                 _context.SaveChanges();
+
+                _mqService.Publish($"Account {id} deposited {amount}.");
+
+                var content = new StringContent(JsonSerializer.Serialize(new { id, amount }), System.Text.Encoding.UTF8, "application/json");
+                var response = _resilientHttpClient.PostAsync("http://example.com/notify", content).Result;
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    return StatusCode((int)response.StatusCode, "External service call failed.");
+                }
             }
 
             return NoContent();
@@ -52,6 +73,16 @@ namespace OnlineBankingApplication.Controllers
 
                 account.Balance -= amount;
                 _context.SaveChanges();
+
+                _mqService.Publish($"Account {id} withdrew {amount}.");
+
+                var content = new StringContent(JsonSerializer.Serialize(new { id, amount }), System.Text.Encoding.UTF8, "application/json");
+                var response = _resilientHttpClient.PostAsync("http://example.com/notify", content).Result;
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    return StatusCode((int)response.StatusCode, "External service call failed.");
+                }
             }
 
             return NoContent();
