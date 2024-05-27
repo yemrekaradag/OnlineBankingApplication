@@ -20,7 +20,7 @@ services:
     depends_on:
       - rabbitmq
     networks:
-      - my-networkk
+      - my-network
   rabbitmq:
     image: "rabbitmq:3-management"
     ports:
@@ -30,6 +30,6 @@ services:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
     networks:
-      - my-networkk
+      - my-network
 networks:
-  my-networkk:
+  my-network:
